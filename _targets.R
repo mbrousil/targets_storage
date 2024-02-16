@@ -131,21 +131,71 @@ list(
     packages = c("dataRetrieval", "tidyverse", "sf", "retry")
   ),
   
-  # Export the file
+  # Use {googledrive} to send this large data file away for storage but document
+  # its location online in a local csv. The goal of this is to mimic the way
+  # that large files may be uploaded to Google Drive for storage, (potential)
+  # versioning, and transfer between pipelines. Note that it also produces a
+  # local .rds file for uploading.
   tar_file(
-    name = chl_wqp_data_file,
-    command = {
-      # Declare file storage location
-      out_path <- "data/chla_wqp_data.feather"
-      
-      write_feather(x = chl_wqp_data,
-                    path = out_path)
-      
-      # Return path to pipeline for tracking
-      out_path
-    },
-    packages = "feather"
-  )
+    name = chl_wqp_data_link_file,
+    command = export_single_file(target = chl_wqp_data,
+                                 folder_pattern = "data/out/")
+  ),
   
+  # If this dataset has been previously downloaded, then there's the option to
+  # use a prior version instead of the dynamically downloaded one above. This
+  # target adds the metadata necessary for this to be used in the rest of the
+  # workflow to a table to store in a local csv.
+  tar_file(
+    name = chl_wqp_data_link_file_stable,
+    command = {
+      
+      # Where to store the csv with link info
+      out_path <- "data/out/chl_wqp_data_out_link_stable.csv"
+      
+      stable_drive_link <- tribble(
+        ~dataset, ~local_path, ~drive_link,
+        "p2_site_counts_chl", "data/out/chl_wqp_data.rds", "https://drive.google.com/file/d/1krSVWZ6U5A8eNaDd-FZUD8K2AzYH6rRX/view?usp=sharing"
+      )
+      
+      # Export the csv
+      write_csv(x = stable_drive_link, file = out_path)
+      
+      # Return path to pipeline
+      out_path
+      
+    }
+  ),
+  
+  # Here we choose whether we want a stable version of the `chl_wqp_data`
+  # dataset, or to use the dynamic version downloaded above. This choice affects
+  # the targets below:
+  tar_target(
+    name = data_version_stable,
+    command = TRUE
+  ),
+  
+  # Mimicking the purpose of a second repo, we read in the table containing
+  # the link from the export above. If a stable version is requested then
+  # we get the download link for the stable dataset defined above
+  tar_file_read(
+    name = chl_wqp_data_link_in,
+    command = {
+      if(data_version_stable){
+        chl_wqp_data_link_file_stable
+      } else {
+        chl_wqp_data_link_file
+      }
+    },
+    cue = tar_cue("always"),
+    read = read_csv(file = !!.x)
+  ),
+  
+  tar_target(
+    name = chl_wqp_drive_download,
+    command = retrieve_data(link_table = chl_wqp_data_link_in,
+                            folder_pattern = "data/in/"),
+    packages = c("tidyverse", "googledrive")
+  )
   
 )

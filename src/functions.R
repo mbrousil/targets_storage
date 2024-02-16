@@ -1,4 +1,6 @@
-# These functions have been copied from the `AquaSat/AquaMatch_download_WQP` repository, which originates from USGS and ROSSyndicate code.
+# Many of these functions have been copied or adapted from the
+# `AquaSat/AquaMatch_download_WQP` repository, which originates
+# from USGS and ROSSyndicate code.
 
 # Get chlorophyll inventory from the WQP
 take_inventory <- function(grid_aoi, wqp_characteristics, wqp_args){
@@ -227,3 +229,65 @@ fetch_wqp_data <- function(site_counts_grouped, char_names, wqp_args = NULL,
   return(wqp_data_out)
 }
 
+
+# A function to export a single target (as a file) to Google Drive and return
+# the shareable Drive link as a filepath
+export_single_file <- function(target, folder_pattern){
+  
+  require(googledrive)
+  
+  # Get target name as a string
+  target_string <- deparse(substitute(target))
+  
+  # We'll export the dataset locally
+  file_local_path <- paste0(folder_pattern,
+                            target_string,
+                            ".rds")
+  
+  write_rds(x = target,
+            file = file_local_path)
+  
+  # Once locally exported, send to Google Drive
+  out_file <- drive_put(media = file_local_path,
+                        path = "~/targets_storage_example/")
+  
+  # Make the Google Drive link shareable: anyone can view
+  out_file_share <- out_file %>%
+    drive_share(role = "reader", type = "anyone")
+  
+  # Return labeled link to data in a df and export
+  link_table <- tibble(dataset = target_string,
+                       local_path = file_local_path,
+                       drive_link = drive_link(as_id(out_file_share$id)))
+  
+  # Where the csv with Drive link is going
+  out_path <- paste0(folder_pattern,
+                     target_string,
+                     "_out_link.csv")
+  
+  # Export the csv
+  write_csv(x = link_table, file = out_path)
+  
+  # Return path to pipeline
+  out_path
+  
+}
+
+# A generalized function to retrieve a datset from Google Drive
+retrieve_data <- function(link_table, folder_pattern){
+  
+  # Download the data from Google Drive and save to a location,
+  # which is named based on the original filepath (folder_pattern) used when
+  # exporting in the first pipeline
+  download_path <- gsub(pattern = folder_pattern,
+                        x = link_table$local_path,
+                        replacement = "data/out/")
+  
+  # Run the download
+  drive_download(file = link_table$drive_link,
+                 path = download_path,
+                 overwrite = TRUE)
+  
+  # Read dataset into pipeline
+  read_rds(download_path)
+}

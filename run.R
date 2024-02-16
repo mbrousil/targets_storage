@@ -31,12 +31,25 @@ lapply(required_pkgs, package_installer)
 
 # Load packages for use below
 library(targets)
+library(googledrive)
 
 
 # Directory handling ------------------------------------------------------
 
 # Check for directory and create if it doesn't exist
-if (!dir.exists("data/")) {dir.create("data/")}
+if (!dir.exists("data/in/")) {dir.create(path = "data/in/",
+                                         recursive = TRUE)}
+
+if (!dir.exists("data/out/")) {dir.create(path = "data/out/",
+                                          recursive = TRUE)}
+
+
+# Google Drive auth -------------------------------------------------------
+
+# Confirm Google Drive is authorized locally
+drive_auth()
+# Select existing account (change if starting from scratch)
+2
 
 
 # Run pipeline ------------------------------------------------------------
