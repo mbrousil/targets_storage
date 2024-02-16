@@ -1,3 +1,110 @@
+# Get chlorophyll inventory from the WQP
+take_inventory <- function(grid_aoi, wqp_characteristics, wqp_args){
+  # Get bounding box for the grid polygon
+  bbox <- st_bbox(grid_aoi)
+  
+  # For each combination of grid cell and CharacteristicName retrieve
+  # inventory information from WQP
+  map_df(.x = wqp_characteristics,
+         .f = ~{
+           
+           # Define arguments for whatWQPdata()
+           wqp_args_all <- list(
+             wqp_args,
+             # Bounding box of the current grid cell
+             bBox = c(bbox$xmin, bbox$ymin, bbox$xmax, bbox$ymax),
+             characteristicName = .x
+           )
+           
+           # Now attempt to retrieve the info
+           retry(whatWQPdata(wqp_args_all),
+                 when = "Error:", 
+                 max_tries = 3) %>%
+             mutate(CharacteristicName = .x,
+                    grid_id = grid_aoi$id)
+         }
+  )
+}
+
+# Assign download groups to the dataset based on the number of records each site
+# has
+assign_download_groups <- function(chl_site_counts){
+  
+  max_sites <- 300
+  max_results <- 250000
+  
+  if(any(chl_site_counts$results_count > max_results)){
+    sites_w_many_records <- chl_site_counts %>%
+      filter(results_count > max_results) %>%
+      pull(MonitoringLocationIdentifier)
+    # Print a message to inform the user that some sites contain a lot of data
+    # message(sprintf(paste0("results_count exceeds max_results for the sites below. ",
+    #                        "Assigning data-heavy sites to their own download group to ",
+    #                        "set up a manageable query to WQP. If you are not already ",
+    #                        "branching across characteristic names, consider doing so to ",
+    #                        "further limit query size. \n\n%s\n"),
+    #                 paste(sites_w_many_records, collapse="\n")))
+  }
+  
+  # Check whether any sites have identifiers that are likely to cause problems when
+  # downloading the data from WQP
+  sitecounts_bad_ids <- identify_bad_ids(chl_site_counts)
+  
+  # Subset 'good' sites with identifiers that can be parsed by WQP
+  sitecounts_good_ids <- chl_site_counts %>%
+    filter(!MonitoringLocationIdentifier %in% sitecounts_bad_ids$site_id)
+  
+  # Within each unique grid_id, use the cumsumbinning function from the MESS package
+  # to group sites based on the cumulative sum of results_count across sites that 
+  # share the same characteristic name, resetting the download group/task number if 
+  # the number of records exceeds the threshold set by `max_results`.
+  sitecounts_grouped_good_ids <- sitecounts_good_ids %>%
+    rename(site_id = MonitoringLocationIdentifier) %>% 
+    split(.$grid_id) %>%
+    map_dfr(.f = function(df){
+      
+      df_grouped <- df %>%
+        group_by(CharacteristicName) %>%
+        arrange(desc(results_count), .by_group = TRUE) %>%
+        mutate(task_num_by_results = cumsumbinning(x = results_count, 
+                                                   threshold = max_results, 
+                                                   maxgroupsize = max_sites), 
+               char_group = cur_group_id()) %>%
+        ungroup() %>% 
+        # Each group from before (which represents a different characteristic 
+        # name) will have task numbers that start with "1", so now we create 
+        # a new column called `task_num` to create unique task numbers within
+        # each grid. For example, both "Specific conductance" and "Temperature" 
+        # may have values for `task_num_by_results` of 1 and 2 but the values 
+        # of char_group (1 and 2, respectively) would mean that they have unique
+        # values for `task_num` equaling 1, 2, 3, and 4.
+        group_by(char_group, task_num_by_results) %>% 
+        mutate(task_num = cur_group_id()) %>% 
+        ungroup() %>%
+        mutate(pull_by_id = TRUE) 
+    }) 
+  
+  # Combine all sites back together (now with assigned download_grp id's) and
+  # format columns
+  sitecounts_grouped_out <- sitecounts_grouped_good_ids %>%
+    # bind_rows(sitecounts_grouped_bad_ids) %>%
+    # Ensure the groups are ordered correctly by prepending a dynamic number of 0s
+    # before the task number based on the maximum number of tasks.
+    mutate(download_grp = sprintf(paste0("%s_%0", nchar(max(task_num)), "d"), 
+                                  grid_id, task_num)) %>% 
+    arrange(download_grp) %>%
+    select(site_id,
+           # lat, lon, datum,
+           grid_id,
+           CharacteristicName, results_count, 
+           download_grp, pull_by_id) %>%
+    group_by(download_grp) %>%
+    tar_group()
+  
+  return(sitecounts_grouped_out)
+  
+}
+
 #' @title Find bad site identifiers
 #' 
 #' @description
