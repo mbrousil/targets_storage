@@ -214,6 +214,7 @@ list(
     packages = c("tidyverse", "MESS")
   ),
   
+  # As of 2024-02-15 the output data frame from this step is ~300 MB
   tar_target(
     name = chl_wqp_data,
     command = fetch_wqp_data(chl_download_groups,
@@ -223,6 +224,21 @@ list(
     error = "continue",
     format = "feather",
     packages = c("dataRetrieval", "tidyverse", "sf", "retry")
+  ),
+  
+  tar_file(
+    name = chl_wqp_data_file,
+    command = {
+      # Declare file storage location
+      out_path <- "data/chla_wqp_data.feather"
+      
+      write_feather(x = chl_wqp_data,
+                    path = out_path)
+      
+      # Return path to pipeline for tracking
+      out_path
+    },
+    packages = "feather"
   )
   
   

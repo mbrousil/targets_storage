@@ -33,6 +33,12 @@ lapply(required_pkgs, package_installer)
 library(targets)
 
 
+# Directory handling ------------------------------------------------------
+
+# Check for directory and create if it doesn't exist
+if (!dir.exists("data/")) {dir.create("data/")}
+
+
 # Run pipeline ------------------------------------------------------------
 
 tar_make()
