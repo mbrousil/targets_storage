@@ -1,3 +1,5 @@
+# These functions have been copied from the `AquaSat/AquaMatch_download_WQP` repository, which originates from USGS and ROSSyndicate code.
+
 # Get chlorophyll inventory from the WQP
 take_inventory <- function(grid_aoi, wqp_characteristics, wqp_args){
   # Get bounding box for the grid polygon

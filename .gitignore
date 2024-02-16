@@ -28,7 +28,7 @@
 
 # Data
 _targets/
-
+data/
 # Ignore data file types
 **.feather
 **.rds
