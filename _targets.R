@@ -191,6 +191,7 @@ list(
     read = read_csv(file = !!.x)
   ),
   
+  # Download the dataset to mimic pulling it into a second repository
   tar_target(
     name = chl_wqp_drive_download,
     command = retrieve_data(link_table = chl_wqp_data_link_in,
