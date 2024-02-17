@@ -172,7 +172,7 @@ list(
   # the targets below:
   tar_target(
     name = data_version_stable,
-    command = TRUE
+    command = FALSE
   ),
   
   # Mimicking the purpose of a second repo, we read in the table containing
