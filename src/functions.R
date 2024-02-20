@@ -2,8 +2,29 @@
 # `AquaSat/AquaMatch_download_WQP` repository, which originates
 # from USGS and ROSSyndicate code.
 
-# Get chlorophyll inventory from the WQP
+#' @title Get parameter inventory from the WQP
+#' 
+#' @description
+#' A function that maps over `characteristicNames` from the WQP and takes an
+#' inventory of all of the data available for those `characteristicNames` within
+#' the current grid cell aoi.
+#' 
+#' @param grid_aoi An sf object for the current area of interest. Intended to be
+#' a single grid cell from a large sampling grid.
+#' 
+#' @param wqp_characteristics A vector of WQP `characteristicNames` to iterate
+#' over while taking inventory of the WQP.
+#' 
+#' @param wqp_args A named list of all arguments other than bbox and
+#' `characteristicName` to provide in the WQP query. 
+#' 
+#' @returns 
+#' Returns a data frame containing counts of records at
+#' `MonitoringLocationIdentifier`, `CharacteristicName`, and `grid_id`
+#' combinations.
+#' 
 take_inventory <- function(grid_aoi, wqp_characteristics, wqp_args){
+  
   # Get bounding box for the grid polygon
   bbox <- st_bbox(grid_aoi)
   
@@ -28,17 +49,34 @@ take_inventory <- function(grid_aoi, wqp_characteristics, wqp_args){
                     grid_id = grid_aoi$id)
          }
   )
+  
 }
 
 # Assign download groups to the dataset based on the number of records each site
 # has
-assign_download_groups <- function(chl_site_counts){
+#' @title Group sites for downloading data without hitting the WQP cap
+#' 
+#' @description 
+#' Function to group inventoried sites into reasonably sized chunks for
+#' downloading data.
+#' 
+#' @param site_counts data frame containing the site identifiers and total 
+#' number of records available for each site. Must contain columns 
+#' `MonitoringLocationIdentifier` and `results_count`.
+#' 
+#' @returns 
+#' Returns a data frame with columns site id, the total number of records,
+#' (retains the column from `site_counts`), site number, and an additional column 
+#' called `download_grp` which is made up of unique groups that enable use of 
+#' `group_by()` and then `tar_group()` for downloading.
+#' 
+assign_download_groups <- function(site_counts){
   
   max_sites <- 300
   max_results <- 250000
   
-  if(any(chl_site_counts$results_count > max_results)){
-    sites_w_many_records <- chl_site_counts %>%
+  if(any(site_counts$results_count > max_results)){
+    sites_w_many_records <- site_counts %>%
       filter(results_count > max_results) %>%
       pull(MonitoringLocationIdentifier)
     # Print a message to inform the user that some sites contain a lot of data
@@ -52,10 +90,10 @@ assign_download_groups <- function(chl_site_counts){
   
   # Check whether any sites have identifiers that are likely to cause problems when
   # downloading the data from WQP
-  sitecounts_bad_ids <- identify_bad_ids(chl_site_counts)
+  sitecounts_bad_ids <- identify_bad_ids(site_counts)
   
   # Subset 'good' sites with identifiers that can be parsed by WQP
-  sitecounts_good_ids <- chl_site_counts %>%
+  sitecounts_good_ids <- site_counts %>%
     filter(!MonitoringLocationIdentifier %in% sitecounts_bad_ids$site_id)
   
   # Within each unique grid_id, use the cumsumbinning function from the MESS package
@@ -230,64 +268,106 @@ fetch_wqp_data <- function(site_counts_grouped, char_names, wqp_args = NULL,
 }
 
 
-# A function to export a single target (as a file) to Google Drive and return
-# the shareable Drive link as a filepath
-export_single_file <- function(target, folder_pattern){
+#' @title Export a single target to Google Drive
+#' 
+#' @description
+#' A function to export a single target (as a file) to Google Drive and return
+#' the shareable Drive link as a file path.
+#' 
+#' @param target The name of the target to be exported (as an object not a string).
+#' 
+#' @param folder_pattern A local path to a location where the target should be
+#' exported before uploading.
+#' 
+#' @param drive_path A path to the folder on Google Drive where the file
+#' should be saved.
+#' 
+#' @returns 
+#' Returns a local path to a csv file containing a text link to the uploaded
+#' file in Google Drive.
+#' 
+export_single_file <- function(target, drive_path){
   
   require(googledrive)
   
   # Get target name as a string
   target_string <- deparse(substitute(target))
   
-  # We'll export the dataset locally
-  file_local_path <- paste0(folder_pattern,
-                            target_string,
-                            ".rds")
+  # Create a temporary file exported locally, which can then be used to upload
+  # to Google Drive
+  file_local_path <- tempfile(fileext = ".rds")
   
   write_rds(x = target,
             file = file_local_path)
   
   # Once locally exported, send to Google Drive
   out_file <- drive_put(media = file_local_path,
-                        path = "~/targets_storage_example/")
+                        # The folder on Google Drive
+                        path = drive_path,
+                        # The filename on Google Drive
+                        name = paste0(target_string, ".rds"))
   
   # Make the Google Drive link shareable: anyone can view
   out_file_share <- out_file %>%
     drive_share(role = "reader", type = "anyone")
   
-  # Return labeled link to data in a df and export
-  link_table <- tibble(dataset = target_string,
-                       local_path = file_local_path,
-                       drive_link = drive_link(as_id(out_file_share$id)))
-  
-  # Where the csv with Drive link is going
-  out_path <- paste0(folder_pattern,
-                     target_string,
-                     "_out_link.csv")
-  
-  # Export the csv
-  write_csv(x = link_table, file = out_path)
-  
-  # Return path to pipeline
-  out_path
+  # Now remove the local file after upload is complete
+  file.remove(file_local_path)
   
 }
 
-# A generalized function to retrieve a datset from Google Drive
-retrieve_data <- function(link_table, folder_pattern){
+#' @title Retrieve a dataset from Google Drive
+#' 
+#' @description
+#' A function to retrieve a dataset from Google Drive after it has been uploaded
+#' in a previous step.
+#' 
+#' @param target The name of the target to be exported (as an object not a string).
+#' 
+#' @param local_folder A string specifying the folder where the file should be
+#' downloaded.
+#' 
+#' @param drive_folder A string specifying the folder location on Google Drive
+#' containing the file to be downloaded.
+#' 
+#' @param stable Logical value. If TRUE, look for file in the "stable" subfolder
+#' in Google Drive. If FALSE, use the path as provided by the user.
+#' 
+#' @param file_type A string giving the file extension to be used.
+#' 
+#' @returns 
+#' The dataset after being downloaded and read into the pipeline from Google Drive.
+#' 
+retrieve_data <- function(target, local_folder, drive_folder, stable, file_type = ".rds"){
   
-  # Download the data from Google Drive and save to a location,
-  # which is named based on the original filepath (folder_pattern) used when
-  # exporting in the first pipeline
-  download_path <- gsub(pattern = folder_pattern,
-                        x = link_table$local_path,
-                        replacement = "data/out/")
+  require(googledrive)
+  
+  # Get target name as a string
+  target_string <- paste0(deparse(substitute(target)), file_type)
+  
+  # Local file download location
+  local_path <- file.path(local_folder, target_string)
+  
+  # Get file contents of the Google Drive folder specified. If stable == TRUE
+  # then append "stable/" to go to the subfolder for stable products.
+  if(stable){
+    folder_contents <- drive_ls(path = paste0(drive_folder, "stable/"))
+  } else{
+    folder_contents <- drive_ls(path = drive_folder)
+  }
+  
+  # Filter the contents to the file requested and obtain its ID
+  drive_file_id <- folder_contents %>%
+    filter(name == target_string) %>%
+    pull(id) %>%
+    as_id(.)
   
   # Run the download
-  drive_download(file = link_table$drive_link,
-                 path = download_path,
+  drive_download(file = drive_file_id,
+                 path = local_path,
                  overwrite = TRUE)
   
   # Read dataset into pipeline
-  read_rds(download_path)
+  read_rds(local_path)
+  
 }
