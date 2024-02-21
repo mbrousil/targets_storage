@@ -46,7 +46,11 @@ if (!dir.exists("data/out/")) {dir.create(path = "data/out/",
 
 # Google Drive auth -------------------------------------------------------
 
-# Confirm Google Drive is authorized locally
+# Confirm Google Drive is authorized locally. If you are a member of the AquaSat team and 
+# are updating the stable version of the pipeline, you will need to authorize Google using
+# the ROSSyndicate gmail account. All other users can use any google address, allowing 
+# for their personal 'version' of the data download for use throughout the remainder of the
+# pipeline.
 drive_auth()
 # Select existing account (change if starting from scratch)
 2

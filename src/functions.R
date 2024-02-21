@@ -288,7 +288,8 @@ fetch_wqp_data <- function(site_counts_grouped, char_names, wqp_args = NULL,
 #' 
 export_single_file <- function(target, drive_path){
   
-  require(googledrive)
+  # authorize using the google email provided
+  drive_auth(google_email)
   
   # Get target name as a string
   target_string <- deparse(substitute(target))
@@ -308,7 +309,7 @@ export_single_file <- function(target, drive_path){
                         name = paste0(target_string, ".rds"))
   
   # Make the Google Drive link shareable: anyone can view
-  out_file_share <- out_file %>%
+drive_share(out_file, role = "reader", type = "anyone")
     drive_share(role = "reader", type = "anyone")
   
   # Now remove the local file after upload is complete
@@ -340,7 +341,8 @@ export_single_file <- function(target, drive_path){
 #' 
 retrieve_data <- function(target, local_folder, drive_folder, stable, file_type = ".rds"){
   
-  require(googledrive)
+  # authorize using the google email provided
+  drive_auth(google_email)
   
   # Get target name as a string
   target_string <- paste0(deparse(substitute(target)), file_type)
