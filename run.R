@@ -4,6 +4,7 @@
 
 # List of packages required for this pipeline
 required_pkgs <- c(
+  "config",
   "dataRetrieval",
   "feather",
   "googledrive",
@@ -26,7 +27,7 @@ package_installer <- function(x) {
   }
 }
 
-# map function using base lapply
+# Iterate through package installs using base lapply
 lapply(required_pkgs, package_installer)
 
 # Load packages for use below

@@ -1,0 +1,6 @@
+default:
+  google_email: "therossyndicate@gmail.com"
+  # Use a stable version of the chlorophyll data?
+  chl_stable: FALSE
+  # Create a stable version of chlorophyll data from this run?
+  chl_create_stable: TRUE

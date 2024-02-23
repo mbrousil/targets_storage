@@ -15,6 +15,15 @@ tar_source("src/")
 # Target list
 list(
   
+  # Grab configuration information for the workflow run (config.yml)
+  tar_target(
+    name = workflow_config,
+    # The config package does not like to be used with library()
+    command = config::get()
+  ),
+  
+  # The 
+  
   # The CharacteristicNames we want to query
   tar_target(
     name = chl_wqp_characteristics,
@@ -55,13 +64,19 @@ list(
   tar_target(
     name = chl_wqp_characteristics_file,
     command = export_single_file(target = chl_wqp_characteristics,
-                                 drive_path = "~/targets_storage_example/chlorophyll/")
+                                 drive_path = "~/targets_storage_example/chlorophyll/",
+                                 stable = workflow_config$chl_create_stable,
+                                 google_email = workflow_config$google_email),
+    packages = c("tidyverse", "googledrive")
   ),
   
   tar_target(
     name = wqp_args_file,
     command = export_single_file(target = wqp_args,
-                                 drive_path = "~/targets_storage_example/chlorophyll/")
+                                 drive_path = "~/targets_storage_example/chlorophyll/",
+                                 stable = workflow_config$chl_create_stable,
+                                 google_email = workflow_config$google_email),
+    packages = c("tidyverse", "googledrive")
   ),
   
   # A grid to use for branching
@@ -155,29 +170,39 @@ list(
   # of this is to mimic the way that large files may be uploaded to Google Drive
   # for storage, (potential) versioning, and transfer between pipelines.
   tar_target(
-    name = chl_wqp_data_link_file,
+    name = chl_wqp_data_file,
     command = export_single_file(target = chl_wqp_data,
-                                 drive_path = "~/targets_storage_example/chlorophyll/")
+                                 drive_path = "~/targets_storage_example/chlorophyll/",
+                                 stable = workflow_config$chl_create_stable,
+                                 google_email = workflow_config$google_email),
+    packages = c("tidyverse", "googledrive")
   ),
   
-  # Here we choose whether we want a stable version of the `chl_wqp_data`
-  # dataset, or to use the dynamic version downloaded above. This choice affects
-  # the targets below:
-  tar_target(
-    name = data_version_stable,
-    command = TRUE
+  # Retrieve the IDs for the most recent stable versions of the chl dataset
+  tar_file_read(
+    name = chl_stable_drive_ids,
+    command = get_file_ids(google_email = workflow_config$google_email,
+                           drive_folder = "~/targets_storage_example/chlorophyll/stable/",
+                           file_path = "data/out/chl_stable_drive_ids.csv",
+                           recent = TRUE,
+                           # Optional
+                           depend = chl_wqp_data_file),
+    read = read_csv(file = !!.x),
+    packages = c("tidyverse", "googledrive")
   ),
   
   # Mimicking the role of a second (e.g., harmonization) repo, we will download
   # the dataset that we exported above. If a stable version is requested
-  # (i.e, data_version_stable == TRUE) the we download the target from the
+  # (i.e, data_version_stable == TRUE) then we download the target from the
   # stable folder on Google Drive.
   tar_target(
     name = chl_wqp_data_in,
     command = retrieve_data(local_folder = "data/in/",
                             drive_folder = "~/targets_storage_example/chlorophyll/",
                             target = chl_wqp_data,
-                            stable = data_version_stable),
+                            google_email = workflow_config$google_email,
+                            stable = workflow_config$chl_stable,
+                            stable_ids = chl_stable_drive_ids),
     packages = c("tidyverse", "googledrive")
   )
   
