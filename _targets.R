@@ -185,6 +185,7 @@ list(
                            drive_folder = "~/targets_storage_example/chlorophyll/stable/",
                            file_path = "data/out/chl_stable_drive_ids.csv",
                            recent = TRUE,
+                           stable_date = "20240223",
                            # Optional
                            depend = chl_wqp_data_file),
     read = read_csv(file = !!.x),

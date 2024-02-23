@@ -1,5 +1,5 @@
-use_stable_links:
-   google_email: ""
+default:
+   google_email: "therossyndicate@gmail.com"
    chl_stable: TRUE
    chl_create_stable: FALSE
 create_new_version:

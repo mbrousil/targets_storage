@@ -429,13 +429,18 @@ retrieve_data <- function(target, local_folder, drive_folder, stable,
 #' @param recent Logical. Should the most recent version of the files (based on
 #' date code in the name) be used?
 #' 
+#' @param stable_date A string containing an eight-digit date (i.e., in
+#' ISO 8601 "basic" format: YYYYMMDD) that should be used to identify the
+#' correct file version.
+#' 
 #' @param depend The (non-string) name of a target that should be run before this,
 #' e.g. to ensure that Drive uploads from earlier in this workflow are considered.
 #'
 #' @return A dribble (Google Drive tibble) containing names and IDs of files
 #' in the specified folder.
 #'
-get_file_ids <- function(google_email, drive_folder, file_path, recent, depend = NULL){
+get_file_ids <- function(google_email, drive_folder, file_path, recent,
+                         stable_date = NULL, depend = NULL){
   
   # Authorize using the google email provided
   drive_auth(google_email)
@@ -444,41 +449,9 @@ get_file_ids <- function(google_email, drive_folder, file_path, recent, depend =
   
   if(recent){
     
-    # Check that files are all in agreement before proceeding:
-    
-    # IDs for each files most recent date
-    max_dates <- folder_contents %>%
-      mutate(no_date = gsub(pattern = "_[0-9]{8}",
-                            x = name,
-                            replacement = ""),
-             date = str_extract(string = name, pattern = "[0-9]{8}") %>%
-               as_date()) %>%
-      group_by(no_date) %>%
-      mutate(max_date = max(date)) %>%
-      filter(date == max_date) %>%
-      ungroup()
-    
-    num_max_dates <- max_dates %>%
-      pull(max_date) %>%
-      unique() %>%
-      length()
-    
-    if(num_max_dates > 1){
-      stop(paste0(
-        "The files in this folder do not have a uniform 'most recent' date in their filenames.",
-        " Perhaps some are out of date?"
-      ))
-    } else if(num_max_dates == 0){
-      stop("No dates detected in Drive filenames. There may be a formatting problem.")
-    }
-    
-    # Most recent date code
-    most_recent_date <- unique(max_dates$max_date) %>%
-      gsub(pattern = "-", replacement = "")
-    
     # Most recent version of the files:
     most_recent_files <- folder_contents %>%
-      filter(grepl(pattern = most_recent_date, x = name)) %>%
+      filter(grepl(pattern = stable_date, x = name)) %>%
       select(name, id) %>%
       write_csv(file = file_path)
     
