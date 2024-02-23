@@ -1,4 +1,12 @@
-default:
+use_stable_links:
+   google_email: ""
+   chl_stable: TRUE
+   chl_create_stable: FALSE
+create_new_version:
+   google_email: ""
+   chl_stable: FALSE
+   chl_create_stable: FALSE
+admin_update:
   google_email: "therossyndicate@gmail.com"
   # Use a stable version of the chlorophyll data?
   chl_stable: FALSE

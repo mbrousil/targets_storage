@@ -57,6 +57,15 @@ drive_auth()
 2
 
 
-# Run pipeline ------------------------------------------------------------
+# There are a few options for running this pipeline, and you will need to assure that your Google email has been added in the `config.yml` file. 
+
+# create a fresh version of all {targets} - make sure that line 22 in `_targets.R` is set to "create_new_version"
+tar_make()
+
+#  just load the stable version from AquaSat - make sure that line 22 in `_targets.R` is set to "use_stable_link"
+tar_make(chl_wqp_data_in)
+
+# members of the AquaSat team can update the stable version using "admin_update" on line 22 in `_targets.R`
+tar_make()
 
 tar_make()

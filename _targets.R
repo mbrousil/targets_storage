@@ -19,7 +19,7 @@ list(
   tar_target(
     name = workflow_config,
     # The config package does not like to be used with library()
-    command = config::get()
+    command = config::get(config = "admin_update")
   ),
   
   # The 

@@ -313,7 +313,7 @@ export_single_file <- function(target, drive_path, stable, google_email){
                         name = paste0(target_string, ".rds"))
   
   # Make the Google Drive link shareable: anyone can view
-  drive_share(out_file, role = "reader", type = "anyone")
+  drive_share_anyone(out_file)
   
   # If stable == TRUE then export a second, dated file to the stable/ subfolder
   if(stable){
@@ -347,10 +347,10 @@ export_single_file <- function(target, drive_path, stable, google_email){
 #' A function to retrieve a dataset from Google Drive after it has been uploaded
 #' in a previous step.
 #' 
-#' @param target The name of the target to be exported (as an object not a string).
+#' @param target The name of the target to be retreived (as an object not a string).
 #' 
 #' @param local_folder A string specifying the folder where the file should be
-#' downloaded.
+#' downloaded to.
 #' 
 #' @param drive_folder A string specifying the folder location on Google Drive
 #' containing the file to be downloaded.
