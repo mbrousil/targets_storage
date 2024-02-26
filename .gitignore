@@ -28,7 +28,11 @@
 
 # Data
 _targets/
-data/
+data/*
+!data/out/
+data/out/*
+!data/out/chl_stable_drive_ids.csv
+
 # Ignore data file types
 **.feather
 **.rds

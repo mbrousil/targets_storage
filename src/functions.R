@@ -1,7 +1,30 @@
-# These functions have been copied from the `AquaSat/AquaMatch_download_WQP` repository, which originates from USGS and ROSSyndicate code.
+# Many of these functions have been copied or adapted from the
+# `AquaSat/AquaMatch_download_WQP` repository, which originates
+# from USGS and ROSSyndicate code.
 
-# Get chlorophyll inventory from the WQP
+#' @title Get parameter inventory from the WQP
+#' 
+#' @description
+#' A function that maps over `characteristicNames` from the WQP and takes an
+#' inventory of all of the data available for those `characteristicNames` within
+#' the current grid cell aoi.
+#' 
+#' @param grid_aoi An sf object for the current area of interest. Intended to be
+#' a single grid cell from a large sampling grid.
+#' 
+#' @param wqp_characteristics A vector of WQP `characteristicNames` to iterate
+#' over while taking inventory of the WQP.
+#' 
+#' @param wqp_args A named list of all arguments other than bbox and
+#' `characteristicName` to provide in the WQP query. 
+#' 
+#' @returns 
+#' Returns a data frame containing counts of records at
+#' `MonitoringLocationIdentifier`, `CharacteristicName`, and `grid_id`
+#' combinations.
+#' 
 take_inventory <- function(grid_aoi, wqp_characteristics, wqp_args){
+  
   # Get bounding box for the grid polygon
   bbox <- st_bbox(grid_aoi)
   
@@ -26,17 +49,35 @@ take_inventory <- function(grid_aoi, wqp_characteristics, wqp_args){
                     grid_id = grid_aoi$id)
          }
   )
+  
 }
+
 
 # Assign download groups to the dataset based on the number of records each site
 # has
-assign_download_groups <- function(chl_site_counts){
+#' @title Group sites for downloading data without hitting the WQP cap
+#' 
+#' @description 
+#' Function to group inventoried sites into reasonably sized chunks for
+#' downloading data.
+#' 
+#' @param site_counts data frame containing the site identifiers and total 
+#' number of records available for each site. Must contain columns 
+#' `MonitoringLocationIdentifier` and `results_count`.
+#' 
+#' @returns 
+#' Returns a data frame with columns site id, the total number of records,
+#' (retains the column from `site_counts`), site number, and an additional column 
+#' called `download_grp` which is made up of unique groups that enable use of 
+#' `group_by()` and then `tar_group()` for downloading.
+#' 
+assign_download_groups <- function(site_counts){
   
   max_sites <- 300
   max_results <- 250000
   
-  if(any(chl_site_counts$results_count > max_results)){
-    sites_w_many_records <- chl_site_counts %>%
+  if(any(site_counts$results_count > max_results)){
+    sites_w_many_records <- site_counts %>%
       filter(results_count > max_results) %>%
       pull(MonitoringLocationIdentifier)
     # Print a message to inform the user that some sites contain a lot of data
@@ -50,10 +91,10 @@ assign_download_groups <- function(chl_site_counts){
   
   # Check whether any sites have identifiers that are likely to cause problems when
   # downloading the data from WQP
-  sitecounts_bad_ids <- identify_bad_ids(chl_site_counts)
+  sitecounts_bad_ids <- identify_bad_ids(site_counts)
   
   # Subset 'good' sites with identifiers that can be parsed by WQP
-  sitecounts_good_ids <- chl_site_counts %>%
+  sitecounts_good_ids <- site_counts %>%
     filter(!MonitoringLocationIdentifier %in% sitecounts_bad_ids$site_id)
   
   # Within each unique grid_id, use the cumsumbinning function from the MESS package
@@ -107,6 +148,7 @@ assign_download_groups <- function(chl_site_counts){
   
 }
 
+
 #' @title Find bad site identifiers
 #' 
 #' @description
@@ -140,7 +182,6 @@ identify_bad_ids <- function(sites){
   
   return(sites_bad_ids)
 }
-
 
 
 #' @title Download data from the Water Quality Portal
@@ -225,5 +266,206 @@ fetch_wqp_data <- function(site_counts_grouped, char_names, wqp_args = NULL,
     mutate(across(everything(), as.character))
   
   return(wqp_data_out)
+}
+
+
+#' @title Export a single target to Google Drive
+#' 
+#' @description
+#' A function to export a single target (as a file) to Google Drive and return
+#' the shareable Drive link as a file path.
+#' 
+#' @param target The name of the target to be exported (as an object not a string).
+#' 
+#' @param drive_path A path to the folder on Google Drive where the file
+#' should be saved.
+#' 
+#' @param stable Logical value. If TRUE, also export the file to the "stable"
+#' subfolder in Google Drive. If FALSE, use the path as provided by the user.
+#' 
+#' @param google_email A string containing the gmail address to use for
+#' Google Drive authentication.
+#' 
+#' @returns 
+#' Returns a local path to a csv file containing a text link to the uploaded
+#' file in Google Drive.
+#' 
+export_single_file <- function(target, drive_path, stable, google_email){
+  
+  # Authorize using the google email provided
+  drive_auth(google_email)
+  
+  # Get target name as a string
+  target_string <- deparse(substitute(target))
+  
+  # Create a temporary file exported locally, which can then be used to upload
+  # to Google Drive
+  file_local_path <- tempfile(fileext = ".rds")
+  
+  write_rds(x = target,
+            file = file_local_path)
+  
+  # Once locally exported, send to Google Drive
+  out_file <- drive_put(media = file_local_path,
+                        # The folder on Google Drive
+                        path = drive_path,
+                        # The filename on Google Drive
+                        name = paste0(target_string, ".rds"))
+  
+  # Make the Google Drive link shareable: anyone can view
+  drive_share_anyone(out_file)
+  
+  # If stable == TRUE then export a second, dated file to the stable/ subfolder
+  if(stable){
+    drive_path_stable <- paste0(drive_path, "stable/")
+    
+    # Once locally exported, send to Google Drive
+    out_file_stable <- drive_put(media = file_local_path,
+                                 # The folder on Google Drive
+                                 path = drive_path_stable,
+                                 # The filename on Google Drive
+                                 name = paste0(target_string,
+                                               "_",
+                                               gsub(pattern = "-",
+                                                    replacement = "",
+                                                    x = Sys.Date()),
+                                               ".rds"))
+    
+    # Make the Google Drive link shareable: anyone can view
+    drive_share(out_file_stable, role = "reader", type = "anyone")
+  }
+  
+  # Now remove the local file after upload is complete
+  file.remove(file_local_path)
+  
+}
+
+
+#' @title Retrieve a dataset from Google Drive
+#' 
+#' @description
+#' A function to retrieve a dataset from Google Drive after it has been uploaded
+#' in a previous step.
+#' 
+#' @param target The name of the target to be retreived (as an object not a string).
+#' 
+#' @param local_folder A string specifying the folder where the file should be
+#' downloaded to.
+#' 
+#' @param drive_folder A string specifying the folder location on Google Drive
+#' containing the file to be downloaded.
+#' 
+#' @param stable Logical value. If TRUE, look for file in the "stable" subfolder
+#' in Google Drive. If FALSE, use the path as provided by the user.
+#' 
+#' @param google_email A string containing the gmail address to use for
+#' Google Drive authentication.
+#' 
+#' @param file_type A string giving the file extension to be used.
+#' 
+#' @param stable_ids  A target containing a tibble with the cols `name` and `id`
+#' to use for retrieving uploaded dataset from Google Drive. ONLY used if stable
+#' is TRUE.
+#' 
+#' @returns 
+#' The dataset after being downloaded and read into the pipeline from Google Drive.
+#' 
+retrieve_data <- function(target, local_folder, drive_folder, stable, 
+                          google_email, file_type = ".rds", stable_ids){
+  
+  # Authorize using the google email provided
+  drive_auth(google_email)
+  
+  # Get target name as a string
+  target_string <- deparse(substitute(target))
+  
+  # Local file download location
+  local_path <- file.path(local_folder, paste0(target_string, ".rds"))
+  
+  # Get file contents of the Google Drive folder specified. If stable == TRUE
+  # then append "stable/" to go to the subfolder for stable products.
+  if(stable){
+    
+    folder_contents <- stable_ids
+    
+  } else{
+    
+    folder_contents <- drive_ls(path = drive_folder)
+    
+  }
+  
+  # Filter the contents to the file requested and obtain its ID
+  drive_file_id <- folder_contents %>%
+    filter(grepl(x = name, pattern = target_string)) %>%
+    pull(id) %>%
+    as_id(.)
+  
+  # Run the download
+  drive_download(file = drive_file_id,
+                 path = local_path,
+                 overwrite = TRUE)
+  
+  # Read dataset into pipeline
+  read_rds(local_path)
+  
+}
+
+
+#' @title Function to retrieve Google Drive IDs for a specified folder.
+#' 
+#' @description
+#' A function that retrieves the Google Drive IDs for a folder and exports them
+#' locally as a csv.
+#' 
+#' @param google_email A string containing the gmail address to use for
+#' Google Drive authentication.
+#' 
+#' @param drive_folder A string specifying the Google Drive folder location of
+#' interest.
+#' 
+#' @param file_path The output destination (incl. filename) for the table of
+#' file info.
+#' 
+#' @param recent Logical. Should the most recent version of the files (based on
+#' date code in the name) be used?
+#' 
+#' @param stable_date A string containing an eight-digit date (i.e., in
+#' ISO 8601 "basic" format: YYYYMMDD) that should be used to identify the
+#' correct file version.
+#' 
+#' @param depend The (non-string) name of a target that should be run before this,
+#' e.g. to ensure that Drive uploads from earlier in this workflow are considered.
+#'
+#' @return A dribble (Google Drive tibble) containing names and IDs of files
+#' in the specified folder.
+#'
+get_file_ids <- function(google_email, drive_folder, file_path, recent,
+                         stable_date = NULL, depend = NULL){
+  
+  # Authorize using the google email provided
+  drive_auth(google_email)
+  
+  folder_contents <- drive_ls(path = drive_folder)
+  
+  if(recent){
+    
+    # Most recent version of the files:
+    most_recent_files <- folder_contents %>%
+      filter(grepl(pattern = stable_date, x = name)) %>%
+      select(name, id) %>%
+      write_csv(file = file_path)
+    
+  } else{
+    
+    # Get info and safe as a csv locally
+    drive_ls(drive_folder) %>%
+      select(name, id) %>%
+      write_csv(file = file_path)
+    
+  }
+  
+  # Return path for tracking
+  file_path
+  
 }
 
