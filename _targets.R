@@ -21,9 +21,7 @@ list(
     # The config package does not like to be used with library()
     command = config::get(config = "admin_update")
   ),
-  
-  # The 
-  
+    
   # The CharacteristicNames we want to query
   tar_target(
     name = chl_wqp_characteristics,
